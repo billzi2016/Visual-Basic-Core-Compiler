@@ -13,12 +13,16 @@ class LexError(ValueError):
 
 @dataclass(slots=True)
 class Lexer:
+    """手写词法分析器，负责把源码字符流拆成 Token 序列。"""
+
     source: str
     index: int = 0
     line: int = 1
     column: int = 1
 
     def tokenize(self) -> list[Token]:
+        """执行完整词法分析，并返回按顺序排列的 Token 列表。"""
+
         tokens: list[Token] = []
         while not self._at_end():
             ch = self._peek()
@@ -72,12 +76,16 @@ class Lexer:
         return tokens
 
     def _scan_identifier(self) -> str:
+        """扫描标识符或关键字候选文本。"""
+
         start = self.index
         while not self._at_end() and (self._peek().isalnum() or self._peek() == "_"):
             self._advance()
         return self.source[start:self.index]
 
     def _scan_number(self) -> tuple[TokenKind, str]:
+        """扫描整数或浮点数字面量。"""
+
         start = self.index
         while not self._at_end() and self._peek().isdigit():
             self._advance()
@@ -92,6 +100,8 @@ class Lexer:
         return TokenKind.INTEGER, self.source[start:self.index]
 
     def _scan_string(self) -> str:
+        """扫描双引号包裹的字符串字面量。"""
+
         start = self.index
         self._advance()
         while not self._at_end() and self._peek() != '"':
@@ -104,13 +114,19 @@ class Lexer:
         return self.source[start:self.index]
 
     def _skip_comment(self) -> None:
+        """跳过从单引号开始直到行尾的注释文本。"""
+
         while not self._at_end() and self._peek() != "\n":
             self._advance()
 
     def _peek(self) -> str:
+        """查看当前字符但不移动游标。"""
+
         return self.source[self.index]
 
     def _advance(self) -> str:
+        """消费当前字符，并同步更新行号和列号。"""
+
         ch = self.source[self.index]
         self.index += 1
         if ch == "\n":
@@ -121,6 +137,8 @@ class Lexer:
         return ch
 
     def _at_end(self) -> bool:
+        """判断游标是否已经到达输入末尾。"""
+
         return self.index >= len(self.source)
 
 

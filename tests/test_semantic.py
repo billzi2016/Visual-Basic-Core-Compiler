@@ -105,6 +105,104 @@ class SemanticTests(unittest.TestCase):
                 """
             )
 
+    def test_rejects_duplicate_callable_name(self) -> None:
+        with self.assertRaises(SemanticError):
+            artifacts_from_source(
+                """
+                Module Program
+                    Function Main() As Integer
+                        Return 1
+                    End Function
+
+                    Sub Main()
+                        Print(1)
+                    End Sub
+                End Module
+                """
+            )
+
+    def test_rejects_wrong_argument_count(self) -> None:
+        with self.assertRaises(SemanticError):
+            artifacts_from_source(
+                """
+                Module Program
+                    Function Add(x As Integer, y As Integer) As Integer
+                        Return x + y
+                    End Function
+
+                    Function Main() As Integer
+                        Return Add(1)
+                    End Function
+                End Module
+                """
+            )
+
+    def test_rejects_missing_function_return(self) -> None:
+        with self.assertRaises(SemanticError):
+            artifacts_from_source(
+                """
+                Module Program
+                    Function Main() As Integer
+                        Dim value As Integer = 1
+                    End Function
+                End Module
+                """
+            )
+
+    def test_rejects_non_call_expression_statement(self) -> None:
+        with self.assertRaises(SemanticError):
+            artifacts_from_source(
+                """
+                Module Program
+                    Sub Main()
+                        1 + 2
+                    End Sub
+                End Module
+                """
+            )
+
+    def test_rejects_print_with_wrong_argument_count(self) -> None:
+        with self.assertRaises(SemanticError):
+            artifacts_from_source(
+                """
+                Module Program
+                    Sub Main()
+                        Print(1, 2)
+                    End Sub
+                End Module
+                """
+            )
+
+    def test_accepts_negative_step_for_loop(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            Module Program
+                Sub Main()
+                    Dim i As Integer = 0
+                    For i = 5 To 1 Step -2
+                        Print(i)
+                    Next
+                End Sub
+            End Module
+            """
+        )
+        self.assertEqual(artifacts.semantic_model.module_name, "Program")
+
+    def test_rejects_non_numeric_step(self) -> None:
+        with self.assertRaises(SemanticError):
+            artifacts_from_source(
+                """
+                Module Program
+                    Sub Main()
+                        Dim i As Integer = 0
+                        For i = 1 To 5 Step True
+                            Print(i)
+                        Next
+                    End Sub
+                End Module
+                """
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

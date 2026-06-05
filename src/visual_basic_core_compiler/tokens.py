@@ -7,6 +7,8 @@ from enum import Enum, auto
 
 
 class TokenKind(Enum):
+    """枚举当前 VB 子集前端需要识别的全部 Token 类型。"""
+
     EOF = auto()
     NEWLINE = auto()
     IDENTIFIER = auto()
@@ -27,9 +29,11 @@ class TokenKind(Enum):
     KW_IF = auto()
     KW_THEN = auto()
     KW_ELSE = auto()
+    KW_ELSEIF = auto()
     KW_WHILE = auto()
     KW_FOR = auto()
     KW_TO = auto()
+    KW_STEP = auto()
     KW_NEXT = auto()
     KW_RETURN = auto()
     KW_AND = auto()
@@ -68,9 +72,11 @@ KEYWORDS = {
     "if": TokenKind.KW_IF,
     "then": TokenKind.KW_THEN,
     "else": TokenKind.KW_ELSE,
+    "elseif": TokenKind.KW_ELSEIF,
     "while": TokenKind.KW_WHILE,
     "for": TokenKind.KW_FOR,
     "to": TokenKind.KW_TO,
+    "step": TokenKind.KW_STEP,
     "next": TokenKind.KW_NEXT,
     "return": TokenKind.KW_RETURN,
     "and": TokenKind.KW_AND,
@@ -84,10 +90,14 @@ KEYWORDS = {
 
 @dataclass(frozen=True, slots=True)
 class Token:
+    """保存 Token 的类别、原始文本和值在源码中的精确位置。"""
+
     kind: TokenKind
     value: str
     line: int
     column: int
 
     def display(self) -> str:
+        """返回稳定的调试文本，便于 CLI 输出和测试断言。"""
+
         return f"{self.kind.name}({self.value!r})@{self.line}:{self.column}"

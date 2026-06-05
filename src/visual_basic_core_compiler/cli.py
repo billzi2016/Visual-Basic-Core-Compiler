@@ -1,9 +1,8 @@
-"""模块说明：提供一个小而清晰的命令行入口。"""
+"""模块说明：提供命令行入口，把编译各阶段和输出模式组织起来。"""
 
 from __future__ import annotations
 
 import argparse
-import tempfile
 from pathlib import Path
 
 from .ast_nodes import format_ast
@@ -13,6 +12,8 @@ from .toolchain import ToolchainDriver, detect_default_target
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
+    """构造 CLI 参数解析器，统一定义当前支持的命令行选项。"""
+
     parser = argparse.ArgumentParser(description="Compile a constrained Visual Basic subset.")
     parser.add_argument("input", type=Path, help="path to the .vb source file")
     parser.add_argument("-o", "--output", type=Path, help="output executable path")
@@ -26,6 +27,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """执行命令行入口，根据参数决定输出哪个编译阶段结果。"""
+
     parser = build_argument_parser()
     args = parser.parse_args(argv)
     source = args.input.read_text(encoding="utf-8")

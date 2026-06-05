@@ -71,6 +71,24 @@ class IRBuilderTests(unittest.TestCase):
         self.assertIn("binary", text)
         self.assertIn("Mod", text)
 
+    def test_emits_signed_for_step_control_flow(self) -> None:
+        ir_program = ir_from_source(
+            """
+            Module Program
+                Sub Main()
+                    Dim i As Integer = 0
+                    For i = 5 To 1 Step -2
+                        Print(i)
+                    Next
+                End Sub
+            End Module
+            """
+        )
+        text = format_ir(ir_program)
+        self.assertIn("for_pos_", text)
+        self.assertIn("for_neg_", text)
+        self.assertIn(">=", text)
+
 
 if __name__ == "__main__":
     unittest.main()

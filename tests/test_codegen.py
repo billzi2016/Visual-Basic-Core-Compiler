@@ -61,6 +61,24 @@ class CodegenTests(unittest.TestCase):
         self.assertIn("%", text)
         self.assertIn("vb_print_bool", text)
 
+    def test_emits_dynamic_for_step_loop(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            Module Program
+                Sub Main()
+                    Dim i As Integer = 0
+                    For i = 5 To 1 Step -2
+                        Print(i)
+                    Next
+                End Sub
+            End Module
+            """
+        )
+        text = ToolchainDriver("portable-c").emit_backend_text(artifacts.optimized_program)
+        self.assertIn("__vb_for_step_", text)
+        self.assertIn("__vb_for_end_", text)
+        self.assertIn(">= 0", text)
+
 
 if __name__ == "__main__":
     unittest.main()

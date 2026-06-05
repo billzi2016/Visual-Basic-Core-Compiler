@@ -18,6 +18,8 @@ class SemanticError(ValueError):
 
 @dataclass(slots=True)
 class FunctionSignature:
+    """保存函数或过程的签名信息，便于后续调用检查。"""
+
     name: str
     return_type: str
     param_types: list[str]
@@ -27,19 +29,27 @@ class FunctionSignature:
 
 @dataclass(slots=True)
 class SemanticModel:
+    """保存语义分析阶段产出的类型与符号查询结果。"""
+
     module_name: str
     functions: dict[str, FunctionSignature]
     expression_types: dict[int, str]
 
     def expression_type(self, expr: ast.Expression) -> str:
+        """返回表达式在语义分析阶段推导出的最终类型。"""
+
         return self.expression_types[id(expr)]
 
     def lookup_function(self, name: str) -> FunctionSignature | None:
+        """按不区分大小写的规则查找函数签名。"""
+
         return self.functions.get(canonical_name(name))
 
 
 @dataclass(slots=True)
 class SemanticAnalyzer:
+    """执行名称解析、类型检查和基础语言规则验证。"""
+
     program: ast.Program
     symbols: SymbolTable = field(init=False, default_factory=SymbolTable)
     functions: dict[str, FunctionSignature] = field(init=False, default_factory=dict)
@@ -50,6 +60,8 @@ class SemanticAnalyzer:
     saw_return: bool = field(init=False, default=False)
 
     def analyze(self) -> SemanticModel:
+        """完成整棵 AST 的语义分析并返回结果模型。"""
+
         module = self.program.module
         self.functions = {}
         self.expression_types = {}
@@ -87,10 +99,14 @@ class SemanticAnalyzer:
         return SemanticModel(module.name, self.functions, self.expression_types)
 
     def _install_builtins(self) -> None:
+        """注册当前编译器支持的最小内置过程集合。"""
+
         self.functions[canonical_name("Print")] = FunctionSignature("Print", VOID, ["Any"], True, None)
         self.symbols.define(Symbol("Print", "function", type_name=VOID, params=["Any"], is_sub=True))
 
     def _analyze_callable(self, member: ast.CallableDecl) -> None:
+        """分析单个 `Sub` 或 `Function` 的参数、语句和返回行为。"""
+
         self.symbols.push()
         self.current_function_name = member.name
         if isinstance(member, ast.SubDecl):
@@ -113,6 +129,8 @@ class SemanticAnalyzer:
             self._error(member, f"function '{member.name}' must contain a return statement")
 
     def _visit_stmt(self, stmt: ast.Statement) -> None:
+        """按语句类型分派对应的语义检查逻辑。"""
+
         if isinstance(stmt, ast.VarDeclStmt):
             if not self.symbols.define(Symbol(stmt.name, "variable", type_name=stmt.type_name)):
                 self._error(stmt, f"duplicate variable '{stmt.name}'")
@@ -160,12 +178,15 @@ class SemanticAnalyzer:
             if variable is None or variable.kind != "variable":
                 self._error(stmt, f"undefined variable '{stmt.variable}'")
             assert variable.type_name is not None
-            if variable.type_name not in NUMERIC_TYPES:
-                self._error(stmt, "for-loop variable must be numeric")
+            if variable.type_name != "Integer":
+                self._error(stmt, "for-loop variable must be Integer in the current compiler")
             start_type = self._visit_expr(stmt.start)
             end_type = self._visit_expr(stmt.end)
+            step_type = self._visit_expr(stmt.step) if stmt.step is not None else variable.type_name
             self._ensure_assignable(stmt.start, variable.type_name, start_type)
             self._ensure_assignable(stmt.end, variable.type_name, end_type)
+            assert step_type is not None
+            self._ensure_assignable(stmt.step or stmt, variable.type_name, step_type)
             self.symbols.push()
             for item in stmt.body:
                 self._visit_stmt(item)
@@ -195,6 +216,8 @@ class SemanticAnalyzer:
         raise AssertionError(f"unhandled statement type: {type(stmt)!r}")
 
     def _visit_expr(self, expr: ast.Expression) -> str:
+        """递归分析表达式，并返回该表达式推导出的类型。"""
+
         if isinstance(expr, ast.IntegerLiteral):
             return self._record_type(expr, "Integer")
         if isinstance(expr, ast.DoubleLiteral):
@@ -266,18 +289,26 @@ class SemanticAnalyzer:
         raise AssertionError(f"unhandled expression type: {type(expr)!r}")
 
     def _record_type(self, expr: ast.Expression, type_name: str) -> str:
+        """记录表达式类型，供后端和测试复用。"""
+
         self.expression_types[id(expr)] = type_name
         return type_name
 
     def _ensure_assignable(self, node: ast.Node, target_type: str, source_type: str) -> None:
+        """检查源类型是否可以赋值给目标类型。"""
+
         if not types_compatible(target_type, source_type):
             self._error(node, f"cannot assign {source_type} to {target_type}")
 
     def _error(self, node: ast.Node, message: str) -> None:
+        """抛出带源码位置的语义错误。"""
+
         raise SemanticError(f"{message} at {node.line}:{node.column}")
 
 
 def types_compatible(target_type: str, source_type: str) -> bool:
+    """判断当前项目约束下两种类型是否允许赋值。"""
+
     if target_type == source_type:
         return True
     if target_type == "Double" and source_type == "Integer":
@@ -286,12 +317,16 @@ def types_compatible(target_type: str, source_type: str) -> bool:
 
 
 def _wider_numeric_type(left_type: str, right_type: str) -> str:
+    """返回两个数值类型参与运算后更宽的结果类型。"""
+
     if "Double" in {left_type, right_type}:
         return "Double"
     return "Integer"
 
 
 def _comparable_for_equality(left_type: str, right_type: str) -> bool:
+    """判断两种类型是否允许参与相等性比较。"""
+
     if left_type == right_type:
         return left_type in PRIMITIVE_TYPES
     return {left_type, right_type} == {"Integer", "Double"}

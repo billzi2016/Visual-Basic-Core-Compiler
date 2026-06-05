@@ -43,6 +43,14 @@ class LexerTests(unittest.TestCase):
         tokens = tokens_from_source("Module Program\nPrint(10 Mod 3)\nEnd Module\n")
         self.assertIn(TokenKind.KW_MOD, [token.kind for token in tokens])
 
+    def test_recognizes_elseif_and_step_keywords(self) -> None:
+        tokens = tokens_from_source(
+            "Module Program\nIf True Then\nElseIf False Then\nEnd If\nFor i = 5 To 1 Step -2\nNext\nEnd Module\n"
+        )
+        kinds = [token.kind for token in tokens]
+        self.assertIn(TokenKind.KW_ELSEIF, kinds)
+        self.assertIn(TokenKind.KW_STEP, kinds)
+
     def test_skips_comments_and_tracks_positions(self) -> None:
         tokens = tokens_from_source("Module Program\n' comment\nPrint(True)\nEnd Module\n")
         print_token = [token for token in tokens if token.value == "Print"][0]

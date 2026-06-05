@@ -111,6 +111,37 @@ class ParserTests(unittest.TestCase):
         self.assertIsInstance(expr, ast.BinaryExpr)
         self.assertEqual(expr.left.operator, "Mod")
 
+    def test_parses_elseif_chain_and_step_for_loop(self) -> None:
+        program = program_from_source(
+            """
+            Module Program
+                Sub Main()
+                    Dim score As Integer = 3
+                    If score = 1 Then
+                        Print("one")
+                    ElseIf score = 2 Then
+                        Print("two")
+                    ElseIf score = 3 Then
+                        Print("three")
+                    Else
+                        Print("other")
+                    End If
+
+                    For score = 5 To 1 Step -2
+                        Print(score)
+                    Next
+                End Sub
+            End Module
+            """
+        )
+        if_stmt = program.module.members[0].body[1]
+        for_stmt = program.module.members[0].body[2]
+        self.assertIsInstance(if_stmt, ast.IfStmt)
+        self.assertIsNotNone(if_stmt.else_body)
+        self.assertIsInstance(if_stmt.else_body[0], ast.IfStmt)
+        self.assertIsInstance(for_stmt, ast.ForStmt)
+        self.assertIsNotNone(for_stmt.step)
+
 
 if __name__ == "__main__":
     unittest.main()

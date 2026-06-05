@@ -15,7 +15,7 @@
 - `Function ... End Function`
 - `Dim name As Type = ...`
 - 类型：`Integer`、`Double`、`String`、`Boolean`
-- 表达式：`+ - * /`
+- 表达式：`+ - * / Mod`
 - 比较：`= <> < <= > >=`
 - 逻辑：`And Or Not`
 - `If ... Then ... Else ... End If`
@@ -33,6 +33,33 @@
 - `Do ... Loop`
 - 完整标准库和完整运行时
 - 多文件编译
+
+## 为什么先生成 C
+
+这个项目是 VB 编译器，但当前第一代后端没有直接生成 macOS 原生可执行文件，而是先生成 Portable C，再交给系统 `clang/cc` 编译。
+
+这样做不是因为 macOS 不能运行 VB，而是因为当前项目如果直接输出 macOS 原生目标代码，就需要自己处理：
+
+- `arm64` 或其他架构的汇编生成
+- `Mach-O` 目标格式
+- 调用约定和栈帧细节
+- 平台相关的运行时细节
+
+相比之下，macOS 上的 C 工具链已经非常成熟，所以当前路线是：
+
+```text
+VB source -> tokens -> AST -> semantic -> IR -> Portable C -> clang/cc -> executable
+```
+
+这样可以把当前阶段的实现重点放在：
+
+- VB 词法分析
+- VB 语法分析
+- VB 语义检查
+- IR 设计与降级
+- 端到端编译链路的正确性
+
+后续如果要继续扩展，可以在保持前端不变的前提下，再增加真正的原生后端。
 
 ## 使用方式
 

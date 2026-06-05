@@ -9,6 +9,8 @@ from .typing import BackendMeta
 
 
 def emit_portable_c(program: IRProgram, meta: BackendMeta) -> str:
+    """把 VB 程序生成稳定、可编译的 Portable C 文本。"""
+
     if program.source_program is None or program.semantic_model is None:
         raise ValueError("portable C backend requires source_program and semantic_model")
 
@@ -58,6 +60,8 @@ def emit_portable_c(program: IRProgram, meta: BackendMeta) -> str:
 
 
 def _render_prototype(module_name: str, member: ast.CallableDecl) -> str:
+    """生成函数或过程的 C 原型声明。"""
+
     params = ", ".join(_render_param(param) for param in member.params) or "void"
     if isinstance(member, ast.SubDecl):
         return f"void {_c_function_name(module_name, member.name)}({params});"
@@ -70,6 +74,8 @@ def _render_callable(
     semantic: SemanticModel,
     meta: BackendMeta,
 ) -> list[str]:
+    """生成单个函数或过程的完整 C 实现。"""
+
     params = ", ".join(_render_param(param) for param in member.params) or "void"
     if isinstance(member, ast.SubDecl):
         signature = f"void {_c_function_name(module_name, member.name)}({params})"
@@ -83,6 +89,8 @@ def _render_callable(
 
 
 def _render_block(module_name: str, body: list[ast.Statement], semantic: SemanticModel, indent: int) -> list[str]:
+    """按顺序渲染语句块中的所有语句。"""
+
     lines: list[str] = []
     for stmt in body:
         lines.extend(_render_stmt(module_name, stmt, semantic, indent))
@@ -90,6 +98,8 @@ def _render_block(module_name: str, body: list[ast.Statement], semantic: Semanti
 
 
 def _render_stmt(module_name: str, stmt: ast.Statement, semantic: SemanticModel, indent: int) -> list[str]:
+    """把单条高层语句翻译成对应的 C 代码片段。"""
+
     pad = "    " * indent
     if isinstance(stmt, ast.VarDeclStmt):
         line = pad + f"{_c_type(stmt.type_name)} {stmt.name}"
@@ -115,15 +125,20 @@ def _render_stmt(module_name: str, stmt: ast.Statement, semantic: SemanticModel,
         lines.append(pad + "}")
         return lines
     if isinstance(stmt, ast.ForStmt):
+        loop_suffix = f"{stmt.line}_{stmt.column}"
         end_expr = _render_expr(module_name, stmt.end, semantic)
-        header = (
+        step_expr = _render_expr(module_name, stmt.step, semantic) if stmt.step is not None else "1"
+        lines = [
+            pad + "{",
+            pad + f"    int __vb_for_end_{loop_suffix} = {end_expr};",
+            pad + f"    int __vb_for_step_{loop_suffix} = {step_expr};",
             pad
-            + f"for ({stmt.variable} = {_render_expr(module_name, stmt.start, semantic)}; "
-            + f"{stmt.variable} <= {end_expr}; "
-            + f"{stmt.variable} = {stmt.variable} + 1) {{"
-        )
-        lines = [header]
+            + f"    for ({stmt.variable} = {_render_expr(module_name, stmt.start, semantic)}; "
+            + f"(__vb_for_step_{loop_suffix} >= 0) ? ({stmt.variable} <= __vb_for_end_{loop_suffix}) : ({stmt.variable} >= __vb_for_end_{loop_suffix}); "
+            + f"{stmt.variable} = {stmt.variable} + __vb_for_step_{loop_suffix}) {{",
+        ]
         lines.extend(_render_block(module_name, stmt.body, semantic, indent + 1))
+        lines.append(pad + "    }")
         lines.append(pad + "}")
         return lines
     if isinstance(stmt, ast.ReturnStmt):
@@ -134,6 +149,8 @@ def _render_stmt(module_name: str, stmt: ast.Statement, semantic: SemanticModel,
 
 
 def _render_expr(module_name: str, expr: ast.Expression, semantic: SemanticModel) -> str:
+    """把表达式节点渲染成一段可嵌入的 C 表达式文本。"""
+
     if isinstance(expr, ast.IntegerLiteral):
         return str(expr.value)
     if isinstance(expr, ast.DoubleLiteral):
@@ -170,10 +187,14 @@ def _render_expr(module_name: str, expr: ast.Expression, semantic: SemanticModel
 
 
 def _render_param(param: ast.Parameter) -> str:
+    """生成单个参数的 C 形参声明文本。"""
+
     return f"{_c_type(param.type_name)} {param.name}"
 
 
 def _c_type(type_name: str) -> str:
+    """把 VB 类型映射到当前后端使用的 C 类型。"""
+
     if type_name == "Integer":
         return "int"
     if type_name == "Double":
@@ -188,12 +209,16 @@ def _c_type(type_name: str) -> str:
 
 
 def _c_unary_operator(operator: str) -> str:
+    """把 VB 一元运算符映射到 C 运算符。"""
+
     if operator.lower() == "not":
         return "!"
     return operator
 
 
 def _c_binary_operator(operator: str) -> str:
+    """把 VB 二元运算符映射到 C 运算符。"""
+
     lowered = operator.lower()
     if lowered == "=":
         return "=="
@@ -209,10 +234,14 @@ def _c_binary_operator(operator: str) -> str:
 
 
 def _c_function_name(module_name: str, name: str) -> str:
+    """生成带模块前缀的稳定 C 符号名。"""
+
     return f"{module_name}__{name}"
 
 
 def _find_main(members: list[ast.CallableDecl]) -> ast.CallableDecl | None:
+    """查找是否存在可映射为程序入口的 `Main`。"""
+
     for member in members:
         if member.name.lower() == "main":
             return member
@@ -220,6 +249,8 @@ def _find_main(members: list[ast.CallableDecl]) -> ast.CallableDecl | None:
 
 
 def _render_entry_point(module_name: str, member: ast.CallableDecl) -> list[str]:
+    """在存在无参 Main 时生成宿主进程入口函数。"""
+
     c_name = _c_function_name(module_name, member.name)
     if member.params:
         return []
