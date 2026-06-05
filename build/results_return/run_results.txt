@@ -1,0 +1,13 @@
+arithmetic | exit=0 | stdout=9
+collatz_steps | exit=0 | stdout=7|22|11|34|17|52
+elseif_chain | exit=0 | stdout=three
+fib | exit=0 | stdout=0|1|1|2|3|5
+for_step | exit=0 | stdout=5|3|1
+function_call | exit=0 | stdout=12
+gcd | exit=0 | stdout=6|21
+hello | exit=0 | stdout=Hello from VB
+if_else | exit=0 | stdout=big
+leetcode_climbing_stairs | exit=0 | stdout=8
+leetcode_palindrome_number | exit=0 | stdout=True|False|True
+prime_numbers | exit=0 | stdout=2|3|5|7|11|13
+while_loop | exit=0 | stdout=0|1|2

@@ -1,0 +1,25 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+
+# 常见工具缓存
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# macOS 杂项
+.DS_Store
+
+# build 目录里的中间产物和二进制
+build/**/*.o
+build/**/*.obj
+build/**/*.out
+build/**/*.exe
+build/**/*.so
+build/**/*.dylib
+build/**/*.dll
+build/**/program
+build/**/a.out
+
+# 保留生成的 C 文件，不做忽略
+!build/**/*.c
