@@ -20,6 +20,7 @@ class Symbol:
     type_name: str | None = None
     params: list[str] | None = None
     is_sub: bool = False
+    array_bound: int | None = None
 
 
 @dataclass(slots=True)

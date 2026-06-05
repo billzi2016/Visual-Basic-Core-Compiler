@@ -51,6 +51,14 @@ class LexerTests(unittest.TestCase):
         self.assertIn(TokenKind.KW_ELSEIF, kinds)
         self.assertIn(TokenKind.KW_STEP, kinds)
 
+    def test_recognizes_select_and_case_keywords(self) -> None:
+        tokens = tokens_from_source(
+            "Module Program\nSelect Case 2\nCase 1, 2\nPrint(2)\nCase Else\nPrint(0)\nEnd Select\nEnd Module\n"
+        )
+        kinds = [token.kind for token in tokens]
+        self.assertIn(TokenKind.KW_SELECT, kinds)
+        self.assertIn(TokenKind.KW_CASE, kinds)
+
     def test_skips_comments_and_tracks_positions(self) -> None:
         tokens = tokens_from_source("Module Program\n' comment\nPrint(True)\nEnd Module\n")
         print_token = [token for token in tokens if token.value == "Print"][0]

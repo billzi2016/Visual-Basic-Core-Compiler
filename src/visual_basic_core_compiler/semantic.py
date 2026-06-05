@@ -34,6 +34,7 @@ class SemanticModel:
     module_name: str
     functions: dict[str, FunctionSignature]
     expression_types: dict[int, str]
+    expression_shapes: dict[int, str]
 
     def expression_type(self, expr: ast.Expression) -> str:
         """返回表达式在语义分析阶段推导出的最终类型。"""
@@ -45,6 +46,11 @@ class SemanticModel:
 
         return self.functions.get(canonical_name(name))
 
+    def expression_shape(self, expr: ast.Expression) -> str | None:
+        """返回表达式的解析形态，例如 `call` 或 `index`。"""
+
+        return self.expression_shapes.get(id(expr))
+
 
 @dataclass(slots=True)
 class SemanticAnalyzer:
@@ -54,6 +60,7 @@ class SemanticAnalyzer:
     symbols: SymbolTable = field(init=False, default_factory=SymbolTable)
     functions: dict[str, FunctionSignature] = field(init=False, default_factory=dict)
     expression_types: dict[int, str] = field(init=False, default_factory=dict)
+    expression_shapes: dict[int, str] = field(init=False, default_factory=dict)
     current_return_type: str = field(init=False, default=VOID)
     current_is_sub: bool = field(init=False, default=False)
     current_function_name: str = field(init=False, default="")
@@ -65,6 +72,7 @@ class SemanticAnalyzer:
         module = self.program.module
         self.functions = {}
         self.expression_types = {}
+        self.expression_shapes = {}
         self.symbols = SymbolTable()
         self._install_builtins()
 
@@ -96,7 +104,7 @@ class SemanticAnalyzer:
         for member in module.members:
             self._analyze_callable(member)
 
-        return SemanticModel(module.name, self.functions, self.expression_types)
+        return SemanticModel(module.name, self.functions, self.expression_types, self.expression_shapes)
 
     def _install_builtins(self) -> None:
         """注册当前编译器支持的最小内置过程集合。"""
@@ -132,20 +140,23 @@ class SemanticAnalyzer:
         """按语句类型分派对应的语义检查逻辑。"""
 
         if isinstance(stmt, ast.VarDeclStmt):
-            if not self.symbols.define(Symbol(stmt.name, "variable", type_name=stmt.type_name)):
+            if stmt.array_bound is not None and stmt.array_bound < 0:
+                self._error(stmt, f"array upper bound for '{stmt.name}' must be non-negative")
+            if not self.symbols.define(
+                Symbol(stmt.name, "variable", type_name=stmt.type_name, array_bound=stmt.array_bound)
+            ):
                 self._error(stmt, f"duplicate variable '{stmt.name}'")
+            if stmt.array_bound is not None and stmt.initializer is not None:
+                self._error(stmt, f"array '{stmt.name}' does not support inline initializer yet")
             if stmt.initializer is not None:
                 source_type = self._visit_expr(stmt.initializer)
                 self._ensure_assignable(stmt, stmt.type_name, source_type)
             return
 
         if isinstance(stmt, ast.AssignmentStmt):
-            symbol = self.symbols.lookup(stmt.name)
-            if symbol is None or symbol.kind != "variable":
-                self._error(stmt, f"undefined variable '{stmt.name}'")
+            target_type = self._analyze_assignment_target(stmt.target)
             source_type = self._visit_expr(stmt.value)
-            assert symbol.type_name is not None
-            self._ensure_assignable(stmt, symbol.type_name, source_type)
+            self._ensure_assignable(stmt, target_type, source_type, context="assignment")
             return
 
         if isinstance(stmt, ast.IfStmt):
@@ -159,6 +170,32 @@ class SemanticAnalyzer:
             if stmt.else_body is not None:
                 self.symbols.push()
                 for item in stmt.else_body:
+                    self._visit_stmt(item)
+                self.symbols.pop()
+            return
+
+        if isinstance(stmt, ast.SelectStmt):
+            selector_type = self._visit_expr(stmt.expression)
+            saw_else = False
+            for index, case in enumerate(stmt.cases):
+                if case.is_else:
+                    if saw_else:
+                        self._error(case, "Select Case can only contain one Case Else")
+                    if index != len(stmt.cases) - 1:
+                        self._error(case, "Case Else must be the last branch in Select Case")
+                    saw_else = True
+                    if case.values:
+                        self._error(case, "Case Else cannot have explicit values")
+                else:
+                    for value in case.values:
+                        case_type = self._visit_expr(value)
+                        if not _comparable_for_equality(selector_type, case_type):
+                            self._error(
+                                value,
+                                f"Select Case value type {case_type} is incompatible with selector type {selector_type}",
+                            )
+                self.symbols.push()
+                for item in case.body:
                     self._visit_stmt(item)
                 self.symbols.pop()
             return
@@ -206,11 +243,12 @@ class SemanticAnalyzer:
             return
 
         if isinstance(stmt, ast.ExpressionStmt):
-            expr_type = self._visit_expr(stmt.expression)
+            self._visit_expr(stmt.expression)
             if not isinstance(stmt.expression, ast.CallExpr):
                 self._error(stmt, "only call expressions can be used as standalone statements")
-            if expr_type != VOID:
-                return
+            shape = self.expression_shapes.get(id(stmt.expression))
+            if shape not in {"builtin_print", "call"}:
+                self._error(stmt.expression, "standalone statement cannot be an array access")
             return
 
         raise AssertionError(f"unhandled statement type: {type(stmt)!r}")
@@ -230,7 +268,19 @@ class SemanticAnalyzer:
             symbol = self.symbols.lookup(expr.identifier)
             if symbol is None or symbol.kind != "variable":
                 self._error(expr, f"undefined variable '{expr.identifier}'")
+            if symbol.array_bound is not None:
+                self._error(expr, f"array variable '{expr.identifier}' requires an index")
             assert symbol.type_name is not None
+            return self._record_type(expr, symbol.type_name)
+        if isinstance(expr, ast.IndexExpr):
+            symbol = self.symbols.lookup(expr.identifier)
+            if symbol is None or symbol.kind != "variable":
+                self._error(expr, f"undefined variable '{expr.identifier}'")
+            if symbol.array_bound is None:
+                self._error(expr, f"'{expr.identifier}' is not an array")
+            self._validate_array_index(expr.index, expr.identifier, symbol.array_bound)
+            assert symbol.type_name is not None
+            self.expression_shapes[id(expr)] = "index"
             return self._record_type(expr, symbol.type_name)
         if isinstance(expr, ast.UnaryExpr):
             operand_type = self._visit_expr(expr.operand)
@@ -273,7 +323,18 @@ class SemanticAnalyzer:
                 argument_type = self._visit_expr(expr.args[0])
                 if argument_type not in PRIMITIVE_TYPES:
                     self._error(expr, f"Print does not support type {argument_type}")
+                self.expression_shapes[id(expr)] = "builtin_print"
                 return self._record_type(expr, VOID)
+            symbol = self.symbols.lookup(expr.callee)
+            if symbol is not None and symbol.kind == "variable":
+                if symbol.array_bound is None:
+                    self._error(expr, f"'{expr.callee}' is not callable and is not an array")
+                if len(expr.args) != 1:
+                    self._error(expr, f"array '{expr.callee}' expects exactly one index argument")
+                self._validate_array_index(expr.args[0], expr.callee, symbol.array_bound)
+                assert symbol.type_name is not None
+                self.expression_shapes[id(expr)] = "index"
+                return self._record_type(expr, symbol.type_name)
             signature = self.functions.get(canonical_name(expr.callee))
             if signature is None:
                 self._error(expr, f"undefined function '{expr.callee}'")
@@ -284,7 +345,8 @@ class SemanticAnalyzer:
                 )
             for arg, expected_type in zip(expr.args, signature.param_types):
                 actual_type = self._visit_expr(arg)
-                self._ensure_assignable(arg, expected_type, actual_type)
+                self._ensure_assignable(arg, expected_type, actual_type, context=f"argument for '{expr.callee}'")
+            self.expression_shapes[id(expr)] = "call"
             return self._record_type(expr, signature.return_type)
         raise AssertionError(f"unhandled expression type: {type(expr)!r}")
 
@@ -294,16 +356,74 @@ class SemanticAnalyzer:
         self.expression_types[id(expr)] = type_name
         return type_name
 
-    def _ensure_assignable(self, node: ast.Node, target_type: str, source_type: str) -> None:
+    def _ensure_assignable(
+        self,
+        node: ast.Node,
+        target_type: str,
+        source_type: str,
+        context: str = "assignment",
+    ) -> None:
         """检查源类型是否可以赋值给目标类型。"""
 
         if not types_compatible(target_type, source_type):
-            self._error(node, f"cannot assign {source_type} to {target_type}")
+            self._error(node, f"{context} cannot assign {source_type} to {target_type}")
 
     def _error(self, node: ast.Node, message: str) -> None:
         """抛出带源码位置的语义错误。"""
 
-        raise SemanticError(f"{message} at {node.line}:{node.column}")
+        raise SemanticError(f"{message} at {node.line}:{node.column} in {node.__class__.__name__}")
+
+    def _analyze_assignment_target(self, target: ast.Expression) -> str:
+        """分析赋值左侧，并返回可写目标的元素类型或标量类型。"""
+
+        if isinstance(target, ast.NameExpr):
+            symbol = self.symbols.lookup(target.identifier)
+            if symbol is None or symbol.kind != "variable":
+                self._error(target, f"undefined variable '{target.identifier}'")
+            if symbol.array_bound is not None:
+                self._error(target, f"array variable '{target.identifier}' requires an index for assignment")
+            assert symbol.type_name is not None
+            return symbol.type_name
+        if isinstance(target, ast.IndexExpr):
+            symbol = self.symbols.lookup(target.identifier)
+            if symbol is None or symbol.kind != "variable":
+                self._error(target, f"undefined variable '{target.identifier}'")
+            if symbol.array_bound is None:
+                self._error(target, f"'{target.identifier}' is not an array")
+            self._validate_array_index(target.index, target.identifier, symbol.array_bound)
+            assert symbol.type_name is not None
+            self.expression_shapes[id(target)] = "index"
+            return symbol.type_name
+        if isinstance(target, ast.CallExpr):
+            symbol = self.symbols.lookup(target.callee)
+            if symbol is None or symbol.kind != "variable":
+                self._error(target, f"undefined variable '{target.callee}'")
+            if symbol.array_bound is None:
+                self._error(target, f"'{target.callee}' is not an array")
+            if len(target.args) != 1:
+                self._error(target, f"array '{target.callee}' assignment expects exactly one index")
+            self._validate_array_index(target.args[0], target.callee, symbol.array_bound)
+            assert symbol.type_name is not None
+            self.expression_shapes[id(target)] = "index"
+            return symbol.type_name
+        self._error(target, "assignment target must be a variable or array element")
+
+    def _validate_array_index(self, index_expr: ast.Expression, array_name: str, upper_bound: int | None) -> None:
+        """检查数组索引类型，并在可静态判定时补充越界错误。"""
+
+        index_type = self._visit_expr(index_expr)
+        if index_type != "Integer":
+            self._error(index_expr, f"array index for '{array_name}' must be Integer, got {index_type}")
+        if upper_bound is None:
+            return
+        if isinstance(index_expr, ast.IntegerLiteral):
+            if index_expr.value < 0:
+                self._error(index_expr, f"array index for '{array_name}' cannot be negative")
+            if index_expr.value > upper_bound:
+                self._error(
+                    index_expr,
+                    f"array index {index_expr.value} is out of range for '{array_name}' (0..{upper_bound})",
+                )
 
 
 def types_compatible(target_type: str, source_type: str) -> bool:

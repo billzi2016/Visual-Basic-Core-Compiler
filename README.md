@@ -14,22 +14,26 @@
 - `Sub ... End Sub`
 - `Function ... End Function`
 - `Dim name As Type = ...`
+- `Dim name(upperBound) As Type`
 - 类型：`Integer`、`Double`、`String`、`Boolean`
 - 表达式：`+ - * / Mod`
 - 比较：`= <> < <= > >=`
 - 逻辑：`And Or Not`
-- `If ... Then ... Else ... End If`
+- `If ... Then ... ElseIf ... Else ... End If`
+- `Select Case ... Case ... Case Else ... End Select`
 - `While ... End While`
-- `For ... To ... Next`
+- `For ... To ... [Step ...] ... Next`
 - `Return`
 - 函数调用
+- 一维数组读写：`nums(i)`、`nums(i) = value`
 - 内置 `Print(...)`
 
 ## 不支持
 
 - `Class`、`Property`、`Structure`
-- 数组和对象系统
-- `Select Case`
+- 多维数组
+- 数组作为函数参数
+- 对象系统
 - `Do ... Loop`
 - 完整标准库和完整运行时
 - 多文件编译
@@ -93,12 +97,27 @@ python -m visual_basic_core_compiler examples/hello.vb --emit-c
 python -m visual_basic_core_compiler examples/hello.vb -o build/hello
 ```
 
+直接编译并运行：
+
+```bash
+python -m visual_basic_core_compiler examples/hello.vb --run
+```
+
+批量运行全部示例并保存结果：
+
+```bash
+sh scripts/run_examples.sh
+```
+
 ## 目录结构
 
 ```text
 src/visual_basic_core_compiler/
 tests/
 examples/
+scripts/
+build/results_stdout/
+build/results_return/
 PRD.md
 TASKS.md
 ARCHITECTURE.md
@@ -109,3 +128,21 @@ ARCHITECTURE.md
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -p "test_*.py"
 ```
+
+当前仓库还提供了完整示例结果归档：
+
+- `build/results_stdout/`：按示例保存 `generated.c`、`stdout.txt`、`stderr.txt`、`exit.txt`
+- `build/results_return/`：保存同样一套结果，便于统一对比和留档
+
+当前示例覆盖了：
+
+- 基础算术与函数调用
+- 条件分支、`ElseIf`、`Select Case`
+- `While`、`For`、`For Step`
+- 递归与数论程序
+- 一维数组扫描与数组类题目
+
+当前测试状态：
+
+- `74` 个 `unittest` 用例通过
+- `examples/` 下全部示例已经实际编译运行并保存结果

@@ -76,6 +76,7 @@ class VarDeclStmt(Statement):
 
     name: str
     type_name: VBType
+    array_bound: int | None
     initializer: "Expression | None"
 
 
@@ -83,7 +84,7 @@ class VarDeclStmt(Statement):
 class AssignmentStmt(Statement):
     """表示简单变量赋值语句。"""
 
-    name: str
+    target: "Expression"
     value: "Expression"
 
 
@@ -102,6 +103,23 @@ class WhileStmt(Statement):
 
     condition: "Expression"
     body: list[Statement]
+
+
+@dataclass(slots=True)
+class CaseClause(Node):
+    """表示 `Select Case` 中单个 `Case` 或 `Case Else` 分支。"""
+
+    values: list["Expression"]
+    body: list["Statement"]
+    is_else: bool = False
+
+
+@dataclass(slots=True)
+class SelectStmt(Statement):
+    """表示 `Select Case ... End Select` 分支结构。"""
+
+    expression: "Expression"
+    cases: list[CaseClause]
 
 
 @dataclass(slots=True)
@@ -169,6 +187,14 @@ class NameExpr(Expression):
     """表示变量名或参数名引用。"""
 
     identifier: str
+
+
+@dataclass(slots=True)
+class IndexExpr(Expression):
+    """表示一维数组的索引访问。"""
+
+    identifier: str
+    index: Expression
 
 
 @dataclass(slots=True)

@@ -89,6 +89,46 @@ class IRBuilderTests(unittest.TestCase):
         self.assertIn("for_neg_", text)
         self.assertIn(">=", text)
 
+    def test_emits_select_case_control_flow(self) -> None:
+        ir_program = ir_from_source(
+            """
+            Module Program
+                Sub Main()
+                    Dim value As Integer = 2
+                    Select Case value
+                        Case 1
+                            Print(1)
+                        Case 2, 3
+                            Print(2)
+                        Case Else
+                            Print(0)
+                    End Select
+                End Sub
+            End Module
+            """
+        )
+        text = format_ir(ir_program)
+        self.assertIn("select_end_", text)
+        self.assertIn("case_body_", text)
+        self.assertIn("cjump", text)
+
+    def test_emits_array_decl_and_index_operations(self) -> None:
+        ir_program = ir_from_source(
+            """
+            Module Program
+                Sub Main()
+                    Dim nums(2) As Integer
+                    nums(0) = 10
+                    Print(nums(0))
+                End Sub
+            End Module
+            """
+        )
+        text = format_ir(ir_program)
+        self.assertIn("array_decl", text)
+        self.assertIn("store_index", text)
+        self.assertIn("load_index", text)
+
 
 if __name__ == "__main__":
     unittest.main()

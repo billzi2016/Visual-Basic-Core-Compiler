@@ -30,6 +30,8 @@ class TokenKind(Enum):
     KW_THEN = auto()
     KW_ELSE = auto()
     KW_ELSEIF = auto()
+    KW_SELECT = auto()
+    KW_CASE = auto()
     KW_WHILE = auto()
     KW_FOR = auto()
     KW_TO = auto()
@@ -46,6 +48,7 @@ class TokenKind(Enum):
     LPAREN = auto()
     RPAREN = auto()
     COMMA = auto()
+    COLON = auto()
     PLUS = auto()
     MINUS = auto()
     STAR = auto()
@@ -73,6 +76,8 @@ KEYWORDS = {
     "then": TokenKind.KW_THEN,
     "else": TokenKind.KW_ELSE,
     "elseif": TokenKind.KW_ELSEIF,
+    "select": TokenKind.KW_SELECT,
+    "case": TokenKind.KW_CASE,
     "while": TokenKind.KW_WHILE,
     "for": TokenKind.KW_FOR,
     "to": TokenKind.KW_TO,

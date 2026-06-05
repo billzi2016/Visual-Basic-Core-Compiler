@@ -23,6 +23,7 @@ def emit_portable_c(program: IRProgram, meta: BackendMeta) -> str:
         " * First-generation backend emits normalized portable C. */",
         "",
         "#include <stdio.h>",
+        "#include <string.h>",
         "",
         "static void vb_print_int(int value) {",
         '    printf("%d\\n", value);',
@@ -102,16 +103,19 @@ def _render_stmt(module_name: str, stmt: ast.Statement, semantic: SemanticModel,
 
     pad = "    " * indent
     if isinstance(stmt, ast.VarDeclStmt):
-        line = pad + f"{_c_type(stmt.type_name)} {stmt.name}"
+        if stmt.array_bound is not None:
+            line = pad + f"{_c_type(stmt.type_name)} {stmt.name}[{stmt.array_bound + 1}]"
+        else:
+            line = pad + f"{_c_type(stmt.type_name)} {stmt.name}"
         if stmt.initializer is not None:
             line += f" = {_render_expr(module_name, stmt.initializer, semantic)}"
         return [line + ";"]
     if isinstance(stmt, ast.AssignmentStmt):
-        return [pad + f"{stmt.name} = {_render_expr(module_name, stmt.value, semantic)};"]
+        return [pad + f"{_render_assignment_target(module_name, stmt.target, semantic)} = {_render_expr(module_name, stmt.value, semantic)};"]
     if isinstance(stmt, ast.ExpressionStmt):
         return [pad + _render_expr(module_name, stmt.expression, semantic) + ";"]
     if isinstance(stmt, ast.IfStmt):
-        lines = [pad + f"if ({_render_expr(module_name, stmt.condition, semantic)}) {{"]
+        lines = [pad + f"if ({_render_condition_expr(module_name, stmt.condition, semantic)}) {{"]
         lines.extend(_render_block(module_name, stmt.then_body, semantic, indent + 1))
         lines.append(pad + "}")
         if stmt.else_body is not None:
@@ -120,10 +124,12 @@ def _render_stmt(module_name: str, stmt: ast.Statement, semantic: SemanticModel,
             lines.append(pad + "}")
         return lines
     if isinstance(stmt, ast.WhileStmt):
-        lines = [pad + f"while ({_render_expr(module_name, stmt.condition, semantic)}) {{"]
+        lines = [pad + f"while ({_render_condition_expr(module_name, stmt.condition, semantic)}) {{"]
         lines.extend(_render_block(module_name, stmt.body, semantic, indent + 1))
         lines.append(pad + "}")
         return lines
+    if isinstance(stmt, ast.SelectStmt):
+        return _render_select_stmt(module_name, stmt, semantic, indent)
     if isinstance(stmt, ast.ForStmt):
         loop_suffix = f"{stmt.line}_{stmt.column}"
         end_expr = _render_expr(module_name, stmt.end, semantic)
@@ -161,10 +167,19 @@ def _render_expr(module_name: str, expr: ast.Expression, semantic: SemanticModel
         return "1" if expr.value else "0"
     if isinstance(expr, ast.NameExpr):
         return expr.identifier
+    if isinstance(expr, ast.IndexExpr):
+        return f"{expr.identifier}[{_render_expr(module_name, expr.index, semantic)}]"
     if isinstance(expr, ast.UnaryExpr):
         op = _c_unary_operator(expr.operator)
         return f"({op}{_render_expr(module_name, expr.operand, semantic)})"
     if isinstance(expr, ast.BinaryExpr):
+        left_type = semantic.expression_type(expr.left)
+        right_type = semantic.expression_type(expr.right)
+        if expr.operator in {"=", "<>"} and left_type == "String" and right_type == "String":
+            comparator = "==" if expr.operator == "=" else "!="
+            left = _render_expr(module_name, expr.left, semantic)
+            right = _render_expr(module_name, expr.right, semantic)
+            return f'(strcmp({left}, {right}) {comparator} 0)'
         op = _c_binary_operator(expr.operator)
         return f"({_render_expr(module_name, expr.left, semantic)} {op} {_render_expr(module_name, expr.right, semantic)})"
     if isinstance(expr, ast.CallExpr):
@@ -181,15 +196,90 @@ def _render_expr(module_name: str, expr: ast.Expression, semantic: SemanticModel
             if arg_type == "Boolean":
                 return f"vb_print_bool({rendered_arg})"
             raise AssertionError(f"unsupported Print type: {arg_type}")
+        if semantic.expression_shape(expr) == "index":
+            return f"{expr.callee}[{_render_expr(module_name, expr.args[0], semantic)}]"
         args = ", ".join(_render_expr(module_name, arg, semantic) for arg in expr.args)
         return f"{_c_function_name(module_name, expr.callee)}({args})"
     raise AssertionError(f"unsupported expression type: {type(expr)!r}")
+
+
+def _render_assignment_target(module_name: str, target: ast.Expression, semantic: SemanticModel) -> str:
+    """把赋值左侧渲染成可写的 C 左值。"""
+
+    if isinstance(target, ast.NameExpr):
+        return target.identifier
+    if isinstance(target, ast.IndexExpr):
+        return f"{target.identifier}[{_render_expr(module_name, target.index, semantic)}]"
+    if isinstance(target, ast.CallExpr) and semantic.expression_shape(target) == "index":
+        return f"{target.callee}[{_render_expr(module_name, target.args[0], semantic)}]"
+    raise AssertionError(f"unsupported assignment target: {type(target)!r}")
+
+
+def _render_condition_expr(module_name: str, expr: ast.Expression, semantic: SemanticModel) -> str:
+    """渲染条件表达式，并去掉最外层多余括号以减少编译器警告。"""
+
+    rendered = _render_expr(module_name, expr, semantic)
+    if rendered.startswith("(") and rendered.endswith(")"):
+        return rendered[1:-1]
+    return rendered
+
+
+def _render_select_stmt(module_name: str, stmt: ast.SelectStmt, semantic: SemanticModel, indent: int) -> list[str]:
+    """把 `Select Case` 结构降级为一串 if / else if / else。"""
+
+    pad = "    " * indent
+    selector = _render_expr(module_name, stmt.expression, semantic)
+    lines = [pad + "{"]
+    temp_name = f"__vb_select_{stmt.line}_{stmt.column}"
+    selector_type = semantic.expression_type(stmt.expression)
+    lines.append(pad + f"    {_c_type(selector_type)} {temp_name} = {selector};")
+
+    first_branch = True
+    else_body: list[ast.Statement] | None = None
+    for case in stmt.cases:
+        if case.is_else:
+            else_body = case.body
+            continue
+        condition = " || ".join(
+            _render_select_case_condition(module_name, temp_name, selector_type, value, semantic) for value in case.values
+        )
+        branch_prefix = "if" if first_branch else "else if"
+        lines.append(pad + f"    {branch_prefix} ({condition}) {{")
+        lines.extend(_render_block(module_name, case.body, semantic, indent + 2))
+        lines.append(pad + "    }")
+        first_branch = False
+
+    if else_body is not None:
+        if first_branch:
+            lines.append(pad + "    {")
+        else:
+            lines.append(pad + "    else {")
+        lines.extend(_render_block(module_name, else_body, semantic, indent + 2))
+        lines.append(pad + "    }")
+
+    lines.append(pad + "}")
+    return lines
 
 
 def _render_param(param: ast.Parameter) -> str:
     """生成单个参数的 C 形参声明文本。"""
 
     return f"{_c_type(param.type_name)} {param.name}"
+
+
+def _render_select_case_condition(
+    module_name: str,
+    temp_name: str,
+    selector_type: str,
+    value: ast.Expression,
+    semantic: SemanticModel,
+) -> str:
+    """生成单个 Case 值与选择器之间的比较条件。"""
+
+    rendered_value = _render_expr(module_name, value, semantic)
+    if selector_type == "String":
+        return f"strcmp({temp_name}, {rendered_value}) == 0"
+    return f"{temp_name} == {rendered_value}"
 
 
 def _c_type(type_name: str) -> str:

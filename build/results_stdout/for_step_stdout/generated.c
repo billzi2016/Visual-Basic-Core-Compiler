@@ -2,6 +2,7 @@
  * First-generation backend emits normalized portable C. */
 
 #include <stdio.h>
+#include <string.h>
 
 static void vb_print_int(int value) {
     printf("%d\n", value);

@@ -146,6 +146,7 @@ _SINGLE_CHAR_TOKENS = {
     "(": TokenKind.LPAREN,
     ")": TokenKind.RPAREN,
     ",": TokenKind.COMMA,
+    ":": TokenKind.COLON,
     "+": TokenKind.PLUS,
     "-": TokenKind.MINUS,
     "*": TokenKind.STAR,

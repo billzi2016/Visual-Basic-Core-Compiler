@@ -2,6 +2,7 @@
  * First-generation backend emits normalized portable C. */
 
 #include <stdio.h>
+#include <string.h>
 
 static void vb_print_int(int value) {
     printf("%d\n", value);
@@ -24,7 +25,7 @@ void Program__Main(void);
 
 /* backend target: macos-x86_64 */
 int Program__ClimbStairs(int n) {
-    if ((n <= 2)) {
+    if (n <= 2) {
         return n;
     }
     return (Program__ClimbStairs((n - 1)) + Program__ClimbStairs((n - 2)));

@@ -49,13 +49,22 @@ class IRBuilder:
 
         if isinstance(stmt, ast.VarDeclStmt):
             self._declare_local(stmt.name)
+            if stmt.array_bound is not None:
+                self._emit("array_decl", stmt.name, str(stmt.array_bound))
             if stmt.initializer is not None:
                 value = self._visit_expr(stmt.initializer)
                 self._emit("store", stmt.name, value)
             return
         if isinstance(stmt, ast.AssignmentStmt):
             value = self._visit_expr(stmt.value)
-            self._emit("store", stmt.name, value)
+            if isinstance(stmt.target, ast.NameExpr):
+                self._emit("store", stmt.target.identifier, value)
+                return
+            if isinstance(stmt.target, ast.CallExpr) and self.semantic_model.expression_shape(stmt.target) == "index":
+                index = self._visit_expr(stmt.target.args[0])
+                self._emit("store_index", stmt.target.callee, index, value)
+                return
+            raise AssertionError(f"unhandled assignment target: {type(stmt.target)!r}")
             return
         if isinstance(stmt, ast.ExpressionStmt):
             self._visit_expr(stmt.expression)
@@ -89,6 +98,34 @@ class IRBuilder:
             for item in stmt.body:
                 self._visit_stmt(item)
             self._emit("jump", cond_label)
+            self._emit("label", end_label)
+            return
+        if isinstance(stmt, ast.SelectStmt):
+            selector = self._visit_expr(stmt.expression)
+            end_label = self._new_label("select_end")
+            for index, case in enumerate(stmt.cases):
+                body_label = self._new_label(f"case_body_{index}")
+                next_label = self._new_label(f"case_next_{index}")
+                if case.is_else:
+                    self._emit("jump", body_label)
+                else:
+                    for value_index, value_expr in enumerate(case.values):
+                        case_value = self._visit_expr(value_expr)
+                        compare_temp = self._new_temp()
+                        self._emit("binary", compare_temp, "=", selector, case_value)
+                        miss_label = (
+                            next_label
+                            if value_index == len(case.values) - 1
+                            else self._new_label(f"case_value_next_{index}_{value_index}")
+                        )
+                        self._emit("cjump", compare_temp, body_label, miss_label)
+                        if miss_label != next_label:
+                            self._emit("label", miss_label)
+                self._emit("label", body_label)
+                for item in case.body:
+                    self._visit_stmt(item)
+                self._emit("jump", end_label)
+                self._emit("label", next_label)
             self._emit("label", end_label)
             return
         if isinstance(stmt, ast.ForStmt):
@@ -152,6 +189,11 @@ class IRBuilder:
             return self._emit_const("True" if expr.value else "False")
         if isinstance(expr, ast.NameExpr):
             return self._emit_load(expr.identifier)
+        if isinstance(expr, ast.IndexExpr):
+            index = self._visit_expr(expr.index)
+            temp = self._new_temp()
+            self._emit("load_index", temp, expr.identifier, index)
+            return temp
         if isinstance(expr, ast.UnaryExpr):
             operand = self._visit_expr(expr.operand)
             temp = self._new_temp()
@@ -168,6 +210,10 @@ class IRBuilder:
             if expr.callee.lower() == "print":
                 self._emit("call_void", "Print", *args)
                 return self._emit_const("0")
+            if self.semantic_model.expression_shape(expr) == "index":
+                temp = self._new_temp()
+                self._emit("load_index", temp, expr.callee, args[0])
+                return temp
             temp = self._new_temp()
             self._emit("call", temp, self._qualified_name(expr.callee), *args)
             return temp

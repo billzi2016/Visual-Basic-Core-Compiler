@@ -113,31 +113,49 @@ class Parser:
             return self._parse_var_decl()
         if self._match(TokenKind.KW_IF):
             return self._parse_if()
+        if self._match(TokenKind.KW_SELECT):
+            return self._parse_select()
         if self._match(TokenKind.KW_WHILE):
             return self._parse_while()
         if self._match(TokenKind.KW_FOR):
             return self._parse_for()
         if self._match(TokenKind.KW_RETURN):
             return self._parse_return()
-        if self._check(TokenKind.IDENTIFIER) and self._check_next(TokenKind.EQ):
-            return self._parse_assignment()
+        if self._check(TokenKind.IDENTIFIER):
+            return self._parse_identifier_led_statement()
 
         expr = self._parse_expression()
         self._consume_statement_end("expected newline after statement")
         return ast.ExpressionStmt(expr.line, expr.column, expr)
+
+    def _parse_identifier_led_statement(self) -> ast.Statement:
+        """解析以标识符开头的语句，例如赋值、数组写入或调用。"""
+
+        target = self._parse_reference()
+        if self._match(TokenKind.EQ):
+            value = self._parse_expression()
+            self._consume_statement_end("expected newline after assignment")
+            return ast.AssignmentStmt(target.line, target.column, target, value)
+        self._consume_statement_end("expected newline after statement")
+        return ast.ExpressionStmt(target.line, target.column, target)
 
     def _parse_var_decl(self) -> ast.VarDeclStmt:
         """解析 `Dim` 变量声明语句。"""
 
         keyword = self._previous()
         name = self._consume(TokenKind.IDENTIFIER, "expected variable name")
+        array_bound = None
+        if self._match(TokenKind.LPAREN):
+            bound_token = self._consume(TokenKind.INTEGER, "expected array upper bound integer")
+            array_bound = int(bound_token.value)
+            self._consume(TokenKind.RPAREN, "expected ')' after array upper bound")
         self._consume(TokenKind.KW_AS, "expected 'As' in variable declaration")
         type_name = self._parse_type_name()
         initializer = None
         if self._match(TokenKind.EQ):
             initializer = self._parse_expression()
         self._consume_statement_end("expected newline after variable declaration")
-        return ast.VarDeclStmt(keyword.line, keyword.column, name.value, type_name, initializer)
+        return ast.VarDeclStmt(keyword.line, keyword.column, name.value, type_name, array_bound, initializer)
 
     def _parse_assignment(self) -> ast.AssignmentStmt:
         """解析简单变量赋值语句。"""
@@ -146,7 +164,7 @@ class Parser:
         self._consume(TokenKind.EQ, "expected '=' in assignment")
         value = self._parse_expression()
         self._consume_statement_end("expected newline after assignment")
-        return ast.AssignmentStmt(name.line, name.column, name.value, value)
+        return ast.AssignmentStmt(name.line, name.column, ast.NameExpr(name.line, name.column, name.value), value)
 
     def _parse_if(self) -> ast.IfStmt:
         """解析 If / ElseIf / Else 条件分支链。"""
@@ -176,6 +194,42 @@ class Parser:
             self._consume(TokenKind.KW_END, "expected 'End If'")
             self._consume(TokenKind.KW_IF, "expected 'End If'")
         return ast.IfStmt(keyword.line, keyword.column, condition, then_body, else_body)
+
+    def _parse_select(self) -> ast.SelectStmt:
+        """解析 `Select Case ... End Select` 分支结构。"""
+
+        keyword = self._previous()
+        self._consume(TokenKind.KW_CASE, "expected 'Case' after 'Select'")
+        expression = self._parse_expression()
+        self._consume_statement_end("expected newline after Select Case header")
+
+        cases: list[ast.CaseClause] = []
+        self._skip_newlines()
+        while not self._at_end_marker(TokenKind.KW_END, TokenKind.KW_SELECT):
+            cases.append(self._parse_case_clause())
+            self._skip_newlines()
+
+        self._consume(TokenKind.KW_END, "expected 'End Select'")
+        self._consume(TokenKind.KW_SELECT, "expected 'End Select'")
+        return ast.SelectStmt(keyword.line, keyword.column, expression, cases)
+
+    def _parse_case_clause(self) -> ast.CaseClause:
+        """解析 `Case` 或 `Case Else` 分支。"""
+
+        case_token = self._consume(TokenKind.KW_CASE, "expected 'Case'")
+        is_else = False
+        values: list[ast.Expression] = []
+        if self._match(TokenKind.KW_ELSE):
+            is_else = True
+        else:
+            values.append(self._parse_expression())
+            while self._match(TokenKind.COMMA):
+                values.append(self._parse_expression())
+        self._consume_statement_end("expected newline after Case clause")
+        body = self._parse_statement_block_until(
+            lambda: self._check(TokenKind.KW_CASE) or self._at_end_marker(TokenKind.KW_END, TokenKind.KW_SELECT)
+        )
+        return ast.CaseClause(case_token.line, case_token.column, values, body, is_else)
 
     def _parse_while(self) -> ast.WhileStmt:
         """解析 `While ... End While` 循环。"""
@@ -311,23 +365,28 @@ class Parser:
         if self._match(TokenKind.KW_FALSE):
             token = self._previous()
             return ast.BooleanLiteral(token.line, token.column, False)
-        if self._match(TokenKind.IDENTIFIER):
-            token = self._previous()
-            if self._match(TokenKind.LPAREN):
-                args: list[ast.Expression] = []
-                if not self._check(TokenKind.RPAREN):
-                    while True:
-                        args.append(self._parse_expression())
-                        if not self._match(TokenKind.COMMA):
-                            break
-                self._consume(TokenKind.RPAREN, "expected ')' after arguments")
-                return ast.CallExpr(token.line, token.column, token.value, args)
-            return ast.NameExpr(token.line, token.column, token.value)
+        if self._check(TokenKind.IDENTIFIER):
+            return self._parse_reference()
         if self._match(TokenKind.LPAREN):
             expr = self._parse_expression()
             self._consume(TokenKind.RPAREN, "expected ')' after expression")
             return expr
         raise self._error(self._peek(), f"unexpected token {self._peek().kind.name}")
+
+    def _parse_reference(self) -> ast.Expression:
+        """解析名称本身，以及名称后跟括号的一元访问或调用。"""
+
+        token = self._consume(TokenKind.IDENTIFIER, "expected identifier")
+        if self._match(TokenKind.LPAREN):
+            args: list[ast.Expression] = []
+            if not self._check(TokenKind.RPAREN):
+                while True:
+                    args.append(self._parse_expression())
+                    if not self._match(TokenKind.COMMA):
+                        break
+            self._consume(TokenKind.RPAREN, "expected ')' after arguments")
+            return ast.CallExpr(token.line, token.column, token.value, args)
+        return ast.NameExpr(token.line, token.column, token.value)
 
     def _parse_type_name(self) -> ast.VBType:
         """解析基础类型名。"""
@@ -412,4 +471,5 @@ class Parser:
     def _error(self, token: Token, message: str) -> ParseError:
         """构造带精确位置的语法错误对象。"""
 
-        return ParseError(f"{message} at {token.line}:{token.column}")
+        found = f"{token.kind.name}({token.value!r})"
+        return ParseError(f"{message} at {token.line}:{token.column}; found {found}")

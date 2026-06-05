@@ -2,6 +2,7 @@
  * First-generation backend emits normalized portable C. */
 
 #include <stdio.h>
+#include <string.h>
 
 static void vb_print_int(int value) {
     printf("%d\n", value);
@@ -24,12 +25,12 @@ void Program__Main(void);
 
 /* backend target: macos-x86_64 */
 int Program__IsPalindrome(int value) {
-    if ((value < 0)) {
+    if (value < 0) {
         return 0;
     }
     int original = value;
     int reversed = 0;
-    while ((value > 0)) {
+    while (value > 0) {
         reversed = ((reversed * 10) + (value % 10));
         value = (value / 10);
     }

@@ -142,6 +142,50 @@ class ParserTests(unittest.TestCase):
         self.assertIsInstance(for_stmt, ast.ForStmt)
         self.assertIsNotNone(for_stmt.step)
 
+    def test_parses_select_case_with_multiple_values(self) -> None:
+        program = program_from_source(
+            """
+            Module Program
+                Sub Main()
+                    Dim score As Integer = 2
+                    Select Case score
+                        Case 1
+                            Print("one")
+                        Case 2, 3
+                            Print("mid")
+                        Case Else
+                            Print("other")
+                    End Select
+                End Sub
+            End Module
+            """
+        )
+        select_stmt = program.module.members[0].body[1]
+        self.assertIsInstance(select_stmt, ast.SelectStmt)
+        self.assertEqual(len(select_stmt.cases), 3)
+        self.assertEqual(len(select_stmt.cases[1].values), 2)
+        self.assertTrue(select_stmt.cases[2].is_else)
+
+    def test_parses_array_declaration_and_index_assignment(self) -> None:
+        program = program_from_source(
+            """
+            Module Program
+                Sub Main()
+                    Dim nums(3) As Integer
+                    nums(0) = 10
+                    Print(nums(0))
+                End Sub
+            End Module
+            """
+        )
+        body = program.module.members[0].body
+        self.assertIsInstance(body[0], ast.VarDeclStmt)
+        self.assertEqual(body[0].array_bound, 3)
+        self.assertIsInstance(body[1], ast.AssignmentStmt)
+        self.assertIsInstance(body[1].target, ast.CallExpr)
+        self.assertEqual(body[1].target.callee, "nums")
+        self.assertIsInstance(body[2], ast.ExpressionStmt)
+
 
 if __name__ == "__main__":
     unittest.main()

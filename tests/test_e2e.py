@@ -35,6 +35,10 @@ class EndToEndTests(unittest.TestCase):
             "prime_numbers.vb",
             "leetcode_palindrome_number.vb",
             "leetcode_climbing_stairs.vb",
+            "select_case_demo.vb",
+            "array_sum.vb",
+            "array_max_scan.vb",
+            "leetcode_two_sum_bruteforce.vb",
         ]
         driver = ToolchainDriver("portable-c")
         for filename in example_names:
@@ -119,6 +123,22 @@ class EndToEndTests(unittest.TestCase):
     @unittest.skipUnless(compiler_available(), "requires clang or cc")
     def test_function_call_example_runs(self) -> None:
         self._assert_example_output("function_call.vb", ["12"])
+
+    @unittest.skipUnless(compiler_available(), "requires clang or cc")
+    def test_select_case_example_runs(self) -> None:
+        self._assert_example_output("select_case_demo.vb", ["three", "match"])
+
+    @unittest.skipUnless(compiler_available(), "requires clang or cc")
+    def test_array_sum_example_runs(self) -> None:
+        self._assert_example_output("array_sum.vb", ["20"])
+
+    @unittest.skipUnless(compiler_available(), "requires clang or cc")
+    def test_array_max_scan_example_runs(self) -> None:
+        self._assert_example_output("array_max_scan.vb", ["9"])
+
+    @unittest.skipUnless(compiler_available(), "requires clang or cc")
+    def test_two_sum_bruteforce_example_runs(self) -> None:
+        self._assert_example_output("leetcode_two_sum_bruteforce.vb", ["0", "1"])
 
     def _assert_example_output(self, filename: str, expected_lines: list[str]) -> None:
         source = (PROJECT_ROOT / "examples" / filename).read_text(encoding="utf-8")

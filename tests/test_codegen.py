@@ -79,6 +79,44 @@ class CodegenTests(unittest.TestCase):
         self.assertIn("__vb_for_end_", text)
         self.assertIn(">= 0", text)
 
+    def test_emits_select_case_and_array_assignment(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            Module Program
+                Sub Main()
+                    Dim nums(2) As Integer
+                    nums(0) = 10
+                    Select Case nums(0)
+                        Case 10
+                            Print("ten")
+                        Case Else
+                            Print("other")
+                    End Select
+                End Sub
+            End Module
+            """
+        )
+        text = ToolchainDriver("portable-c").emit_backend_text(artifacts.optimized_program)
+        self.assertIn("nums[0] = 10;", text)
+        self.assertIn("__vb_select_", text)
+        self.assertIn("if (", text)
+
+    def test_emits_string_equality_with_strcmp(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            Module Program
+                Sub Main()
+                    If "alpha" = "alpha" Then
+                        Print("same")
+                    End If
+                End Sub
+            End Module
+            """
+        )
+        text = ToolchainDriver("portable-c").emit_backend_text(artifacts.optimized_program)
+        self.assertIn("#include <string.h>", text)
+        self.assertIn("strcmp(", text)
+
 
 if __name__ == "__main__":
     unittest.main()

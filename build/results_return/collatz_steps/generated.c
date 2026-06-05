@@ -2,6 +2,7 @@
  * First-generation backend emits normalized portable C. */
 
 #include <stdio.h>
+#include <string.h>
 
 static void vb_print_int(int value) {
     printf("%d\n", value);
@@ -24,9 +25,9 @@ void Program__Main(void);
 /* backend target: macos-x86_64 */
 void Program__Main(void) {
     int value = 7;
-    while ((value > 1)) {
+    while (value > 1) {
         vb_print_int(value);
-        if (((value % 2) == 0)) {
+        if ((value % 2) == 0) {
             value = (value / 2);
         }
         else {

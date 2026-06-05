@@ -2,6 +2,7 @@
  * First-generation backend emits normalized portable C. */
 
 #include <stdio.h>
+#include <string.h>
 
 static void vb_print_int(int value) {
     printf("%d\n", value);
@@ -24,15 +25,15 @@ void Program__Main(void);
 /* backend target: macos-x86_64 */
 void Program__Main(void) {
     int score = 3;
-    if ((score == 1)) {
+    if (score == 1) {
         vb_print_string("one");
     }
     else {
-        if ((score == 2)) {
+        if (score == 2) {
             vb_print_string("two");
         }
         else {
-            if ((score == 3)) {
+            if (score == 3) {
                 vb_print_string("three");
             }
             else {

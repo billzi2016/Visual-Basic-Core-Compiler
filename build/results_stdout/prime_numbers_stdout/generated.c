@@ -2,6 +2,7 @@
  * First-generation backend emits normalized portable C. */
 
 #include <stdio.h>
+#include <string.h>
 
 static void vb_print_int(int value) {
     printf("%d\n", value);
@@ -24,12 +25,12 @@ void Program__Main(void);
 
 /* backend target: macos-x86_64 */
 int Program__IsPrime(int n) {
-    if ((n < 2)) {
+    if (n < 2) {
         return 0;
     }
     int i = 2;
-    while (((i * i) <= n)) {
-        if (((n % i) == 0)) {
+    while ((i * i) <= n) {
+        if ((n % i) == 0) {
             return 0;
         }
         i = (i + 1);
@@ -40,7 +41,7 @@ int Program__IsPrime(int n) {
 /* backend target: macos-x86_64 */
 void Program__Main(void) {
     int value = 2;
-    while ((value <= 20)) {
+    while (value <= 20) {
         if (Program__IsPrime(value)) {
             vb_print_int(value);
         }

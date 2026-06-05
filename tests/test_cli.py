@@ -72,6 +72,14 @@ class CLITests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("__vb_for_step_", buffer.getvalue())
 
+    def test_emit_c_mode_for_select_case_array_example(self) -> None:
+        source_path = PROJECT_ROOT / "examples" / "select_case_demo.vb"
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            exit_code = main([str(source_path), "--emit-c"])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("__vb_select_", buffer.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

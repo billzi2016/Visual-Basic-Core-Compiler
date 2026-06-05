@@ -203,6 +203,114 @@ class SemanticTests(unittest.TestCase):
                 """
             )
 
+    def test_accepts_select_case_and_array_updates(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            Module Program
+                Sub Main()
+                    Dim nums(2) As Integer
+                    nums(0) = 10
+                    nums(1) = 20
+                    Select Case nums(0)
+                        Case 5
+                            Print("five")
+                        Case 10
+                            Print("ten")
+                        Case Else
+                            Print("other")
+                    End Select
+                End Sub
+            End Module
+            """
+        )
+        self.assertEqual(artifacts.semantic_model.module_name, "Program")
+
+    def test_rejects_bare_array_variable_use(self) -> None:
+        with self.assertRaisesRegex(SemanticError, "requires an index"):
+            artifacts_from_source(
+                """
+                Module Program
+                    Sub Main()
+                        Dim nums(1) As Integer
+                        Print(nums)
+                    End Sub
+                End Module
+                """
+            )
+
+    def test_rejects_non_integer_array_index(self) -> None:
+        with self.assertRaisesRegex(SemanticError, "must be Integer"):
+            artifacts_from_source(
+                """
+                Module Program
+                    Sub Main()
+                        Dim nums(1) As Integer
+                        nums(True) = 1
+                    End Sub
+                End Module
+                """
+            )
+
+    def test_rejects_array_index_out_of_range_literal(self) -> None:
+        with self.assertRaisesRegex(SemanticError, "out of range"):
+            artifacts_from_source(
+                """
+                Module Program
+                    Sub Main()
+                        Dim nums(1) As Integer
+                        nums(3) = 1
+                    End Sub
+                End Module
+                """
+            )
+
+    def test_rejects_case_else_before_last_branch(self) -> None:
+        with self.assertRaisesRegex(SemanticError, "last branch"):
+            artifacts_from_source(
+                """
+                Module Program
+                    Sub Main()
+                        Dim score As Integer = 1
+                        Select Case score
+                            Case Else
+                                Print("other")
+                            Case 1
+                                Print("one")
+                        End Select
+                    End Sub
+                End Module
+                """
+            )
+
+    def test_rejects_select_case_type_mismatch(self) -> None:
+        with self.assertRaisesRegex(SemanticError, "incompatible"):
+            artifacts_from_source(
+                """
+                Module Program
+                    Sub Main()
+                        Dim score As Integer = 1
+                        Select Case score
+                            Case "one"
+                                Print("bad")
+                        End Select
+                    End Sub
+                End Module
+                """
+            )
+
+    def test_rejects_standalone_array_access_statement(self) -> None:
+        with self.assertRaisesRegex(SemanticError, "array access"):
+            artifacts_from_source(
+                """
+                Module Program
+                    Sub Main()
+                        Dim nums(1) As Integer
+                        nums(0)
+                    End Sub
+                End Module
+                """
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
