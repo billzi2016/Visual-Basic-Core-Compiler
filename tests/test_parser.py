@@ -86,6 +86,31 @@ class ParserTests(unittest.TestCase):
                 """
             )
 
+    def test_parses_mod_and_recursive_call(self) -> None:
+        program = program_from_source(
+            """
+            Module Program
+                Function IsOdd(value As Integer) As Boolean
+                    Return value Mod 2 = 1
+                End Function
+
+                Function Fib(n As Integer) As Integer
+                    If n <= 1 Then
+                        Return n
+                    End If
+                    Return Fib(n - 1) + Fib(n - 2)
+                End Function
+            End Module
+            """
+        )
+        is_odd = program.module.members[0]
+        fib = program.module.members[1]
+        self.assertIsInstance(is_odd.body[0], ast.ReturnStmt)
+        self.assertIsInstance(fib.body[1], ast.ReturnStmt)
+        expr = is_odd.body[0].value
+        self.assertIsInstance(expr, ast.BinaryExpr)
+        self.assertEqual(expr.left.operator, "Mod")
+
 
 if __name__ == "__main__":
     unittest.main()

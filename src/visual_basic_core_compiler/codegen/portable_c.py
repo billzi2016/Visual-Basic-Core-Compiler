@@ -203,6 +203,8 @@ def _c_binary_operator(operator: str) -> str:
         return "&&"
     if lowered == "or":
         return "||"
+    if lowered == "mod":
+        return "%"
     return operator
 
 

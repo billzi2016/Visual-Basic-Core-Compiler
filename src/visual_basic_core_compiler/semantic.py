@@ -225,9 +225,11 @@ class SemanticAnalyzer:
             left_type = self._visit_expr(expr.left)
             right_type = self._visit_expr(expr.right)
             operator = expr.operator.lower()
-            if operator in {"+", "-", "*", "/"}:
+            if operator in {"+", "-", "*", "/", "mod"}:
                 if left_type not in NUMERIC_TYPES or right_type not in NUMERIC_TYPES:
                     self._error(expr, f"operator '{expr.operator}' requires numeric operands")
+                if operator == "mod" and (left_type != "Integer" or right_type != "Integer"):
+                    self._error(expr, "operator 'Mod' requires Integer operands")
                 return self._record_type(expr, _wider_numeric_type(left_type, right_type))
             if operator in {"=", "<>"}:
                 if _comparable_for_equality(left_type, right_type):

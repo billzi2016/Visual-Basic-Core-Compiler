@@ -39,6 +39,10 @@ class LexerTests(unittest.TestCase):
             ],
         )
 
+    def test_recognizes_mod_keyword(self) -> None:
+        tokens = tokens_from_source("Module Program\nPrint(10 Mod 3)\nEnd Module\n")
+        self.assertIn(TokenKind.KW_MOD, [token.kind for token in tokens])
+
     def test_skips_comments_and_tracks_positions(self) -> None:
         tokens = tokens_from_source("Module Program\n' comment\nPrint(True)\nEnd Module\n")
         print_token = [token for token in tokens if token.value == "Print"][0]

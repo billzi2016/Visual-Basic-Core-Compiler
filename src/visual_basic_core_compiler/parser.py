@@ -222,7 +222,7 @@ class Parser:
 
     def _parse_multiplicative(self) -> ast.Expression:
         expr = self._parse_unary()
-        while self._match(TokenKind.STAR, TokenKind.SLASH):
+        while self._match(TokenKind.STAR, TokenKind.SLASH, TokenKind.KW_MOD):
             operator = self._previous()
             right = self._parse_unary()
             expr = ast.BinaryExpr(operator.line, operator.column, operator.value, expr, right)

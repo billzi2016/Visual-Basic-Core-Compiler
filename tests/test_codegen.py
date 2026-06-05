@@ -43,6 +43,24 @@ class CodegenTests(unittest.TestCase):
         self.assertIn("int Program__Add(int x, int y)", text)
         self.assertIn("return Program__Main();", text)
 
+    def test_emits_mod_operator_and_boolean_print(self) -> None:
+        artifacts = artifacts_from_source(
+            """
+            Module Program
+                Function IsPalindrome(value As Integer) As Boolean
+                    Return value Mod 2 = 0
+                End Function
+
+                Sub Main()
+                    Print(IsPalindrome(12))
+                End Sub
+            End Module
+            """
+        )
+        text = ToolchainDriver("portable-c").emit_backend_text(artifacts.optimized_program)
+        self.assertIn("%", text)
+        self.assertIn("vb_print_bool", text)
+
 
 if __name__ == "__main__":
     unittest.main()

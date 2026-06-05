@@ -46,6 +46,31 @@ class IRBuilderTests(unittest.TestCase):
         self.assertIn("Program.Add", text)
         self.assertIn("return", text)
 
+    def test_emits_nested_loop_and_mod_logic(self) -> None:
+        ir_program = ir_from_source(
+            """
+            Module Program
+                Function IsPrime(n As Integer) As Boolean
+                    If n < 2 Then
+                        Return False
+                    End If
+                    Dim i As Integer = 2
+                    While i * i <= n
+                        If n Mod i = 0 Then
+                            Return False
+                        End If
+                        i = i + 1
+                    End While
+                    Return True
+                End Function
+            End Module
+            """
+        )
+        text = format_ir(ir_program)
+        self.assertIn("while_cond_", text)
+        self.assertIn("binary", text)
+        self.assertIn("Mod", text)
+
 
 if __name__ == "__main__":
     unittest.main()

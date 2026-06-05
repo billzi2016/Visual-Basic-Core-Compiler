@@ -35,6 +35,7 @@ class TokenKind(Enum):
     KW_AND = auto()
     KW_OR = auto()
     KW_NOT = auto()
+    KW_MOD = auto()
     KW_TRUE = auto()
     KW_FALSE = auto()
 
@@ -75,6 +76,7 @@ KEYWORDS = {
     "and": TokenKind.KW_AND,
     "or": TokenKind.KW_OR,
     "not": TokenKind.KW_NOT,
+    "mod": TokenKind.KW_MOD,
     "true": TokenKind.KW_TRUE,
     "false": TokenKind.KW_FALSE,
 }
